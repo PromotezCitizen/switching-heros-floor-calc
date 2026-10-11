@@ -55,7 +55,7 @@
       <label>오프라인 층<input id="offlineFloor" type="number" inputmode="numeric" min="1"></label>
       <label>분당 처치 수 (직접 사냥)<input id="kills" type="number" inputmode="decimal" min="0"></label>
     </div>
-    <p class="note">오프라인 층부터 아래로 25층 구간마다 벽 직후 (25n+1, 보상이 뛰는 층) 와 벽 직전 (25n−1, 몬스터 체력이 뛰기 전 층) 만 보여 줍니다. 분당 처치 수를 넣으면 경험치·골드 손익분기가 그 수를 넘는 층에서 멈춥니다.</p>
+    <p class="note">오프라인 층 (현재 층) 부터 아래로 25층 구간마다 벽 직후 (25n+1, 보상이 뛰는 층), 벽 (25n, 몬스터 체력이 뛰는 층), 벽 직전 (25n−1) 만 보여 줍니다. 분당 처치 수를 넣으면 경험치·골드 손익분기가 그 수를 넘는 층에서 멈춥니다.</p>
   </section>
 
   <section class="card">
@@ -145,12 +145,14 @@
       return;
     }
     const kills = num('kills');
-    // 25층 구간마다 벽 직후 (25n+1) 와 벽 직전 (25n-1) 만, 오프라인 층부터 아래로
+    // 현재 층 (25n+1 이 아니면) 다음, 25층 구간마다 벽 직후 (25n+1) · 벽 (25n) · 벽 직전 (25n-1), 오프라인 층부터 아래로
     const floors = [];
+    if (input.offlineFloor % WALL_STEP !== 1) floors.push({ floor: input.offlineFloor, kind: '현재 층' });
     for (let wall = Math.floor(input.offlineFloor / WALL_STEP) * WALL_STEP; wall >= WALL_STEP; wall -= WALL_STEP) {
       if (wall + 1 <= input.offlineFloor) floors.push({ floor: wall + 1, kind: '벽 직후' });
+      if (wall < input.offlineFloor) floors.push({ floor: wall, kind: '벽' });
       floors.push({ floor: wall - 1, kind: '벽 직전' });
-      if (!kills && floors.length >= MAX_BLOCKS_WITHOUT_KILLS * 2) break;
+      if (!kills && floors.length >= MAX_BLOCKS_WITHOUT_KILLS * 3) break;
     }
 
     const offRate = FloorCalc.offlinePerMinute(input);
