@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>층수 계산기</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1d2330; --muted: #6b7280; --line: #e3e6eb;
+    --accent: #2563eb; --good: #15803d; --bad: #b91c1c; --chip: #eef2ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12151b; --card: #1b2029; --text: #e6e9ef; --muted: #9aa3b2; --line: #2a313d;
+      --accent: #60a5fa; --good: #4ade80; --bad: #f87171; --chip: #1e2a44;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12151b; --card: #1b2029; --text: #e6e9ef; --muted: #9aa3b2; --line: #2a313d;
+    --accent: #60a5fa; --good: #4ade80; --bad: #f87171; --chip: #1e2a44;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.45 -apple-system, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 20px; margin: 4px 0 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+  .card h2 { font-size: 15px; margin: 0 0 8px; color: var(--muted); font-weight: 600; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+  input[type=number], select { font-size: 16px; padding: 8px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg); color: var(--text); width: 100%; }
+  .toggle { flex-direction: row; align-items: center; gap: 8px; color: var(--text); font-size: 14px; }
+  .toggle input { width: 20px; height: 20px; }
+  .note { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+  .summary { font-size: 14px; }
+  .row { border-top: 1px solid var(--line); padding: 8px 0; }
+  .row:first-child { border-top: none; }
+  .floor { font-weight: 700; }
+  .vals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 4px; }
+  .val { background: var(--chip); border-radius: 8px; padding: 6px; text-align: center; font-size: 13px; }
+  .val b { display: block; font-size: 15px; }
+  .good { color: var(--good); } .bad { color: var(--bad); }
+  #status { font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>층수 계산기</h1>
+  <p id="status">데이터 불러오는 중…</p>
+
+  <section class="card">
+    <h2>층</h2>
+    <div class="grid">
+      <label>오프라인 층<input id="offlineFloor" type="number" inputmode="numeric" min="1"></label>
+      <label>분당 처치 수 (직접 사냥)<input id="kills" type="number" inputmode="decimal" min="0"></label>
+      <label>볼 층 시작<input id="fromFloor" type="number" inputmode="numeric" min="1"></label>
+      <label>볼 층 끝<input id="toFloor" type="number" inputmode="numeric" min="1"></label>
+    </div>
+    <p class="note">시작·끝을 비우면 오프라인 층부터 50층 아래까지 봅니다.</p>
+  </section>
+
+  <section class="card">
+    <h2>계정</h2>
+    <div class="grid">
+      <label>VIP 레벨<input id="vip" type="number" inputmode="numeric" min="0"></label>
+      <label>요정의 유대 레벨<input id="fairyLevel" type="number" inputmode="numeric" min="0"></label>
+      <label class="toggle"><input id="adRemoved" type="checkbox">광고 제거</label>
+      <label class="toggle"><input id="fairyOn" type="checkbox">요정의 축복 켜짐 (직접 사냥)</label>
+      <label class="toggle"><input id="ad" type="checkbox">오프라인 광고 보상</label>
+      <label class="toggle"><input id="offlinePackage" type="checkbox">오프라인 보상 패키지</label>
+    </div>
+    <p class="note">요정의 축복은 게임 보상 계산에서 두 번 더해집니다 (경험치·골드만). 광고 제거면 직접 사냥·오프라인 모두 상시, 아니면 요청해서 1시간만 켜지므로 직접 사냥에만 넣고 오프라인에는 넣지 않습니다.</p>
+  </section>
+
+  <section class="card">
+    <h2>보너스 (자원별)</h2>
+    <div class="grid" id="bonusGrid"></div>
+    <p class="note">음식·이벤트는 직접 사냥에만, 길드 스킬·효과 패키지는 오프라인에도 붙습니다 (효과 패키지 오프라인 포함은 게임 코드 기준, 실측 안 됨).</p>
+  </section>
+
+  <section class="card">
+    <h2>결과</h2>
+    <div id="summary" class="summary"></div>
+    <div id="rows"></div>
+  </section>
+</main>
+<script src="calc.js"></script>
+<script>
+(function () {
+  const NAMES = { exp: '경험치', gold: '골드', ess: '정수' };
+  const FOODS = [0, 25, 60, 125];
+  const SCAN_DEPTH = 50;
+  const MAX_ROWS = 300;
+  const STORE_KEY = 'floor-calc-inputs';
+  let data = null;
+
+  const grid = document.getElementById('bonusGrid');
+  FloorCalc.RESOURCES.forEach((resource) => {
+    grid.insertAdjacentHTML('beforeend',
+      `<label>${NAMES[resource]} 음식<select id="food_${resource}">${FOODS.map((v) => `<option value="${v}">${v ? v + '%' : '없음'}</option>`).join('')}</select></label>` +
+      `<label>${NAMES[resource]} 길드 스킬 %<input id="guild_${resource}" type="number" inputmode="numeric" min="0"></label>` +
+      `<label class="toggle"><input id="event_${resource}" type="checkbox">${NAMES[resource]} 이벤트 +100%</label>` +
+      `<label class="toggle"><input id="pkg_${resource}" type="checkbox">${NAMES[resource]} 효과 패키지 +100%</label>`);
+  });
+
+  const ids = ['offlineFloor', 'kills', 'fromFloor', 'toFloor', 'vip', 'fairyLevel', 'adRemoved', 'fairyOn', 'ad', 'offlinePackage'];
+  FloorCalc.RESOURCES.forEach((r) => ids.push('food_' + r, 'guild_' + r, 'event_' + r, 'pkg_' + r));
+  const el = (id) => document.getElementById(id);
+  const num = (id) => { const v = parseFloat(el(id).value); return isFinite(v) ? v : 0; };
+
+  function save() {
+    try {
+      const values = {};
+      ids.forEach((id) => { values[id] = el(id).type === 'checkbox' ? el(id).checked : el(id).value; });
+      localStorage.setItem(STORE_KEY, JSON.stringify(values));
+    } catch (e) { /* 저장 못 해도 계산은 됨 */ }
+  }
+  function load() {
+    try {
+      const values = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
+      ids.forEach((id) => { if (id in values) { if (el(id).type === 'checkbox') el(id).checked = values[id]; else el(id).value = values[id]; } });
+    } catch (e) { /* 무시 */ }
+  }
+
+  function readInput() {
+    const per = (prefix, f) => Object.fromEntries(FloorCalc.RESOURCES.map((r) => [r, f(prefix + r)]));
+    return {
+      offlineFloor: Math.floor(num('offlineFloor')),
+      vip: Math.floor(num('vip')), fairyLevel: Math.floor(num('fairyLevel')),
+      adRemoved: el('adRemoved').checked, fairyOn: el('fairyOn').checked,
+      ad: el('ad').checked, offlinePackage: el('offlinePackage').checked,
+      food: per('food_', num), guild: per('guild_', num),
+      event: per('event_', (id) => el(id).checked), effectPackage: per('pkg_', (id) => el(id).checked),
+    };
+  }
+
+  function render() {
+    save();
+    if (!data) return;
+    const input = readInput();
+    const summary = el('summary'), rows = el('rows');
+    rows.innerHTML = '';
+    if (input.offlineFloor < 1 || input.offlineFloor > data.count) {
+      summary.textContent = `오프라인 층을 넣어 주세요 (1 ~ ${data.count}).`;
+      return;
+    }
+    const kills = num('kills');
+    let from = Math.floor(num('fromFloor')) || input.offlineFloor;
+    let to = Math.floor(num('toFloor')) || Math.max(1, input.offlineFloor - SCAN_DEPTH);
+    from = Math.min(Math.max(from, 1), data.count); to = Math.min(Math.max(to, 1), data.count);
+    const step = to >= from ? 1 : -1;
+
+    const offRate = FloorCalc.offlinePerMinute(input);
+    const offLines = FloorCalc.RESOURCES.map((r) => {
+      const b = FloorCalc.bonusPercent(input, r);
+      return `${NAMES[r]} 보너스 오프라인 ${b.offline}% / 직접 ${b.online}%`;
+    });
+    summary.innerHTML = `오프라인 ${input.offlineFloor}층: 분당 ${offRate.toFixed(1)}마리` +
+      ` · 1마리 ${FloorCalc.formatGame(FloorCalc.rewardLog(data, input.offlineFloor, 'gold'))} (경험치·골드)<br>` +
+      offLines.join('<br>') + (kills ? `<br>직접 사냥 분당 ${kills}마리 기준 배수 표시 (1 이상이면 직접 사냥이 이득)` : '');
+
+    let count = 0;
+    const parts = [];
+    for (let floor = from; step > 0 ? floor <= to : floor >= to; floor += step) {
+      if (++count > MAX_ROWS) { parts.push(`<p class="note">${MAX_ROWS}층까지만 표시했습니다.</p>`); break; }
+      const vals = FloorCalc.RESOURCES.map((r) => {
+        const need = FloorCalc.breakeven(data, input, floor, r);
+        const ratio = kills ? kills / need : null;
+        const ratioText = ratio === null ? '' : `<span class="${ratio >= 1 ? 'good' : 'bad'}">x${ratio.toFixed(2)}</span>`;
+        return `<div class="val">${NAMES[r]}<b>${need.toFixed(0)}마리</b>${ratioText}</div>`;
+      }).join('');
+      parts.push(`<div class="row"><span class="floor">${floor}층</span> · 1마리 ${FloorCalc.formatGame(FloorCalc.rewardLog(data, floor, 'gold'))}<div class="vals">${vals}</div></div>`);
+    }
+    rows.innerHTML = parts.join('');
+  }
+
+  load();
+  document.querySelectorAll('input, select').forEach((node) => node.addEventListener('input', render));
+  fetch('stages.json').then((r) => r.json()).then((json) => {
+    data = json;
+    el('status').textContent = `층 ${json.count.toLocaleString('ko-KR')}개 · 손익분기 = 오프라인과 같아지는 직접 사냥 분당 처치 수`;
+    render();
+  }).catch(() => { el('status').textContent = '데이터를 불러오지 못했습니다 (stages.json).'; });
+})();
+</script>
+</body>
+</html>
