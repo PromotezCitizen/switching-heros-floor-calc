@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>층수 계산기</title>
+<title>온라인 효율 계산기</title>
 <style>
   :root {
     --bg: #f6f7f9; --card: #ffffff; --text: #1d2330; --muted: #6b7280; --line: #e3e6eb;
@@ -78,7 +78,7 @@
 <body>
 <main>
   <div class="head">
-    <h1>층수 계산기</h1>
+    <h1>온라인 효율 계산기</h1>
     <button type="button" class="btn" id="openSettings">설정</button>
   </div>
   <p id="status">불러오는 중…</p>
@@ -201,7 +201,6 @@
     FAIRY_RESOURCES.forEach((r) => {
       if (removed) el('fairy_' + r).checked = true;
       el('fairy_' + r).disabled = removed;
-      el('fairyText_' + r).textContent = removed ? '요정의 축복 상시 (광고 제거)' : '요정의 축복';
     });
   }
 
