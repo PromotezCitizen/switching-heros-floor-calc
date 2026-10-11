@@ -42,12 +42,12 @@
 
   /**
    * 자원별 보너스 % : { offline, online }
-   * 요정의 축복: 광고 제거면 상시 (온라인·오프라인 모두), 아니면 요청해서 1시간만 켜지므로
-   * 온라인은 fairyOn 칸을 따르고 오프라인 (몇 시간 단위) 에는 넣지 않음.
+   * 요정의 축복: 광고 제거면 상시 (온라인·오프라인 모두), 아니면 경험치·골드 칸을 광고로 따로 1시간씩 켜므로
+   * 온라인은 그 자원의 fairyOn[자원] 칸을 따르고 오프라인 (몇 시간 단위) 에는 넣지 않음.
    */
   function bonusPercent(input, resource) {
     const fairyValue = resource === 'ess' ? 0 : fairyPercent(input.fairyLevel, true) * FAIRY.times;
-    const fairyOnline = input.adRemoved || input.fairyOn ? fairyValue : 0;
+    const fairyOnline = input.adRemoved || (input.fairyOn && input.fairyOn[resource]) ? fairyValue : 0;
     const fairyOffline = input.adRemoved ? fairyValue : 0;
     const common = vipOnline(input.vip, resource) + (input.guild[resource] || 0)
       + (input.effectPackage[resource] ? EFFECT_PACKAGE_PERCENT : 0);

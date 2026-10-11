@@ -34,6 +34,10 @@
   .toggle input { width: 20px; height: 20px; }
   .note { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
   .summary { font-size: 14px; }
+  .compare { border-collapse: collapse; margin-bottom: 6px; }
+  .compare th, .compare td { padding: 3px 10px; border-bottom: 1px solid var(--line); }
+  .compare th { text-align: left; font-weight: 600; color: var(--muted); }
+  .compare td, .compare thead th { text-align: right; }
   .row { border-top: 1px solid var(--line); padding: 8px 0; }
   .row:first-child { border-top: none; }
   .floor { font-weight: 700; }
@@ -43,13 +47,28 @@
   .good { color: var(--good); } .bad { color: var(--bad); }
   #status { font-size: 13px; color: var(--muted); }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chips.two-rows { display: grid; grid-template-columns: 1fr 1fr; }
+  .chips.two-rows .chip { justify-content: center; text-align: center; }
   .chip { position: relative; flex-direction: row; align-items: center; padding: 7px 12px; border: 1px solid var(--line);
     border-radius: 999px; font-size: 14px; color: var(--text); cursor: pointer; user-select: none; }
   .chip input { position: absolute; opacity: 0; width: 1px; height: 1px; }
   .chip:has(input:checked) { background: var(--accent); border-color: var(--accent); color: #fff; }
   .chip:has(input:disabled) { opacity: 0.75; cursor: default; }
-  details.card > summary { font-size: 15px; color: var(--muted); font-weight: 600; cursor: pointer; }
-  details.card[open] > summary { margin-bottom: 8px; }
+  .head { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 12px; }
+  .head h1 { margin: 0; }
+  .btn { font-size: 15px; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--card); color: var(--text); cursor: pointer; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  /* 높이 제한·내부 스크롤 없이 페이지에 붙여, 길면 페이지 전체가 스크롤됨 (top 은 열 때 스크립트가 정함) */
+  dialog#settings { position: absolute; inset: auto 0 auto 0; width: min(560px, calc(100% - 24px));
+    max-width: none; max-height: none; overflow: visible; margin: 0 auto 16px; padding: 0; border: none;
+    border-radius: 16px; background: var(--card); color: var(--text); }
+  dialog#settings::backdrop { background: rgba(0, 0, 0, 0.5); }
+  .sheet-head { position: sticky; top: 0; display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; background: var(--card); border-bottom: 1px solid var(--line); z-index: 1;
+    border-radius: 16px 16px 0 0; }
+  .sheet-head h2 { font-size: 16px; margin: 0; }
+  .sheet-body { padding: 0 16px 16px; }
   .sub { border-top: 1px solid var(--line); padding: 10px 0 2px; }
   .sub h3 { font-size: 14px; margin: 0 0 6px; }
   .report { font-size: 14px; text-align: center; }
@@ -58,7 +77,10 @@
 </head>
 <body>
 <main>
-  <h1>층수 계산기</h1>
+  <div class="head">
+    <h1>층수 계산기</h1>
+    <button type="button" class="btn" id="openSettings">설정</button>
+  </div>
   <p id="status">불러오는 중…</p>
 
   <section class="card">
@@ -77,17 +99,20 @@
     <div id="rows"></div>
   </section>
 
-  <details class="card" id="settings">
-    <summary>설정 (계정 · 보너스)</summary>
+  <dialog id="settings">
+    <div class="sheet-head">
+      <h2>설정 (계정 · 보너스)</h2>
+      <button type="button" class="btn primary" id="closeSettings">완료</button>
+    </div>
+    <div class="sheet-body">
     <div class="sub">
       <h3>계정</h3>
       <div class="grid">
         <label>VIP 레벨<input id="vip" type="number" inputmode="numeric" min="0"></label>
         <label>요정의 유대 레벨<input id="fairyLevel" type="number" inputmode="numeric" min="0"></label>
       </div>
-      <div class="chips">
+      <div class="chips two-rows">
         <label class="chip"><input id="adRemoved" type="checkbox">광고 제거</label>
-        <label class="chip"><input id="fairyOn" type="checkbox"><span id="fairyOnText">요정의 축복 (온라인)</span></label>
         <label class="chip"><input id="ad" type="checkbox">오프라인 광고 보상</label>
         <label class="chip"><input id="offlinePackage" type="checkbox">오프라인 패키지</label>
       </div>
@@ -98,7 +123,8 @@
     <div id="bonusGroups"></div>
     <p class="note"><b>온라인에만:</b> 음식, 이벤트<br>
       <b>오프라인에도:</b> 길드 스킬, 효과 패키지</p>
-  </details>
+    </div>
+  </dialog>
 
   <section class="card report">
     계산이 이상하거나 넣고 싶은 기능이 있으면
@@ -118,18 +144,25 @@
   const STORE_KEY = 'floor-calc-inputs';
   let data = null;
 
+  /** 요정의 축복이 붙는 자원 (정수 없음), 광고로 켤 때는 칸마다 따로 켜짐 */
+  const FAIRY_RESOURCES = ['exp', 'gold'];
   const groups = document.getElementById('bonusGroups');
   FloorCalc.RESOURCES.forEach((resource) => {
     groups.insertAdjacentHTML('beforeend',
       `<div class="sub"><h3>${NAMES[resource]}</h3><div class="grid">` +
       `<label>음식<select id="food_${resource}">${FOODS.map((v) => `<option value="${v}">${v ? v + '%' : '없음'}</option>`).join('')}</select></label>` +
       `<label>길드 스킬 %<input id="guild_${resource}" type="number" inputmode="numeric" min="0"></label></div>` +
-      `<div class="chips"><label class="chip"><input id="event_${resource}" type="checkbox">이벤트 +100%</label>` +
+      `<div class="chips">` +
+      (FAIRY_RESOURCES.includes(resource)
+        ? `<label class="chip"><input id="fairy_${resource}" type="checkbox"><span id="fairyText_${resource}">요정의 축복 (온라인)</span></label>`
+        : '') +
+      `<label class="chip"><input id="event_${resource}" type="checkbox">이벤트 +100%</label>` +
       `<label class="chip"><input id="pkg_${resource}" type="checkbox">효과 패키지 +100%</label></div></div>`);
   });
 
-  const ids = ['offlineFloor', 'kills', 'vip', 'fairyLevel', 'adRemoved', 'fairyOn', 'ad', 'offlinePackage'];
+  const ids = ['offlineFloor', 'kills', 'vip', 'fairyLevel', 'adRemoved', 'ad', 'offlinePackage'];
   FloorCalc.RESOURCES.forEach((r) => ids.push('food_' + r, 'guild_' + r, 'event_' + r, 'pkg_' + r));
+  FAIRY_RESOURCES.forEach((r) => ids.push('fairy_' + r));
   const el = (id) => document.getElementById(id);
   const num = (id) => { const v = parseFloat(el(id).value); return isFinite(v) ? v : 0; };
 
@@ -143,6 +176,8 @@
   function load() {
     try {
       const values = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
+      // 예전 저장 값 (요정의 축복 칸 하나) 은 경험치·골드 두 칸으로 옮김
+      if ('fairyOn' in values) FAIRY_RESOURCES.forEach((r) => { if (!(('fairy_' + r) in values)) values['fairy_' + r] = values.fairyOn; });
       ids.forEach((id) => { if (id in values) { if (el(id).type === 'checkbox') el(id).checked = values[id]; else el(id).value = values[id]; } });
     } catch (e) { /* 무시 */ }
   }
@@ -152,7 +187,8 @@
     return {
       offlineFloor: Math.floor(num('offlineFloor')),
       vip: Math.floor(num('vip')), fairyLevel: Math.floor(num('fairyLevel')),
-      adRemoved: el('adRemoved').checked, fairyOn: el('fairyOn').checked,
+      adRemoved: el('adRemoved').checked,
+      fairyOn: Object.fromEntries(FAIRY_RESOURCES.map((r) => [r, el('fairy_' + r).checked])),
       ad: el('ad').checked, offlinePackage: el('offlinePackage').checked,
       food: per('food_', num), guild: per('guild_', num),
       event: per('event_', (id) => el(id).checked), effectPackage: per('pkg_', (id) => el(id).checked),
@@ -162,9 +198,11 @@
   /** 광고 제거면 요정의 축복은 상시 켜짐: 칸을 켜고 잠금 */
   function syncFairy() {
     const removed = el('adRemoved').checked;
-    if (removed) el('fairyOn').checked = true;
-    el('fairyOn').disabled = removed;
-    el('fairyOnText').textContent = removed ? '요정의 축복 상시 (광고 제거)' : '요정의 축복 (온라인)';
+    FAIRY_RESOURCES.forEach((r) => {
+      if (removed) el('fairy_' + r).checked = true;
+      el('fairy_' + r).disabled = removed;
+      el('fairyText_' + r).textContent = removed ? '요정의 축복 상시 (광고 제거)' : '요정의 축복 (온라인)';
+    });
   }
 
   function render() {
@@ -189,15 +227,14 @@
     }
 
     const offRate = FloorCalc.offlinePerMinute(input);
-    const bonusText = FloorCalc.RESOURCES.map((r) => {
+    const bonusRows = FloorCalc.RESOURCES.map((r) => {
       const b = FloorCalc.bonusPercent(input, r);
-      return `${NAMES[r]} ${b.offline}% / ${b.online}%`;
-    }).join('<br>');
-    summary.innerHTML = `오프라인 ${input.offlineFloor}층 · 분당 ${Math.round(offRate)}마리 · 1마리 ${FloorCalc.formatGame(FloorCalc.rewardLog(data, input.offlineFloor, 'gold'))}<br>` +
-      `보너스 (오프라인/온라인)<br>${bonusText}<br>` +
-      `배수: 분당 ${kills}마리 잡을 때 오프라인 대비`;
+      return `<tr><th>${NAMES[r]} 보너스</th><td>${b.offline}%</td><td>${b.online}%</td></tr>`;
+    }).join('');
+    summary.innerHTML = `<table class="compare"><thead><tr><th></th><th>오프라인</th><th>온라인</th></tr></thead><tbody>` +
+      `<tr><th>분당 처치</th><td>${Math.round(offRate)}마리</td><td>${kills}마리</td></tr>${bonusRows}</tbody></table>`;
 
-    const parts = [];
+    const parts = [`<p class="note">배수 = 분당 ${kills}마리로 잡을 때 오프라인 대비</p>`];
     for (const { floor, kind } of floors) {
       if (parts.length >= MAX_ROWS) break;
       const needs = Object.fromEntries(FloorCalc.RESOURCES.map((r) => [r, FloorCalc.breakeven(data, input, floor, r)]));
@@ -216,8 +253,16 @@
   }
 
   load();
-  // 처음 쓰는 사람 (저장된 오프라인 층 없음) 은 설정을 펼쳐 보여 줌, 이후엔 접힌 채로
-  el('settings').open = !el('offlineFloor').value;
+  // 설정 창은 "설정" 버튼으로만 열고, 열 때 보고 있던 위치에서 시작
+  const dialog = el('settings');
+  const DIALOG_TOP_GAP = 16;
+  el('openSettings').addEventListener('click', () => {
+    dialog.style.top = `${window.scrollY + DIALOG_TOP_GAP}px`;
+    dialog.showModal();
+  });
+  el('closeSettings').addEventListener('click', () => dialog.close());
+  // 바깥 (어두운 배경) 을 누르면 닫힘
+  dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
   syncFairy();
   document.querySelectorAll('input, select').forEach((node) => node.addEventListener('input', render));
   fetch('stages.json').then((r) => r.json()).then((json) => {
