@@ -2,8 +2,8 @@
  * 층수 계산기 계산 (화면과 분리, 브라우저와 node 둘 다에서 씀).
  * - 스테이지 1마리 보상 = 층 기본 보상 x (1 + 보너스 합 % / 100), 보너스는 전부 더함
  * - 요정의 축복: 경험치·골드에 축복 %의 2배 (획득 기록 실측: 25% → 1.5배, 50% → 2배), 정수 없음
- * - 오프라인과 직접 사냥 공통: 요정 x2, VIP 사냥 보너스, 길드 스킬, 상점 효과 패키지 (+100)
- * - 직접 사냥만: 음식, 효과 버프 아이템 (이벤트 +100)
+ * - 오프라인과 온라인 공통: 요정 x2, VIP 사냥 보너스, 길드 스킬, 상점 효과 패키지 (+100)
+ * - 온라인만: 음식, 효과 버프 아이템 (이벤트 +100)
  * - 오프라인 처치 수 = (200 + 패키지 20) 마리 / (60 - VIP 시간 감소 - 패키지 10) 초, 광고 배수 = 1 + (20 + VIP + 패키지 20) / 100
  */
 (function (root) {
@@ -42,8 +42,8 @@
 
   /**
    * 자원별 보너스 % : { offline, online }
-   * 요정의 축복: 광고 제거면 상시 (직접 사냥·오프라인 모두), 아니면 요청해서 1시간만 켜지므로
-   * 직접 사냥은 fairyOn 칸을 따르고 오프라인 (몇 시간 단위) 에는 넣지 않음.
+   * 요정의 축복: 광고 제거면 상시 (온라인·오프라인 모두), 아니면 요청해서 1시간만 켜지므로
+   * 온라인은 fairyOn 칸을 따르고 오프라인 (몇 시간 단위) 에는 넣지 않음.
    */
   function bonusPercent(input, resource) {
     const fairyValue = resource === 'ess' ? 0 : fairyPercent(input.fairyLevel, true) * FAIRY.times;
@@ -62,7 +62,7 @@
     return Math.log10(data[key + 'M'][index]) + data[key + 'E'][index];
   }
 
-  /** 직접 사냥 층에서 오프라인과 같아지는 분당 처치 수 */
+  /** 온라인 사냥 층에서 오프라인과 같아지는 분당 처치 수 */
   function breakeven(data, input, floor, resource) {
     const bonus = bonusPercent(input, resource);
     const offlineLog = rewardLog(data, input.offlineFloor, resource) + Math.log10(1 + bonus.offline / 100);

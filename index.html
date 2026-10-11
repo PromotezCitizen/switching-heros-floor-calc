@@ -42,6 +42,16 @@
   .val b { display: block; font-size: 15px; }
   .good { color: var(--good); } .bad { color: var(--bad); }
   #status { font-size: 13px; color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { position: relative; flex-direction: row; align-items: center; padding: 7px 12px; border: 1px solid var(--line);
+    border-radius: 999px; font-size: 14px; color: var(--text); cursor: pointer; user-select: none; }
+  .chip input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .chip:has(input:checked) { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .chip:has(input:disabled) { opacity: 0.75; cursor: default; }
+  details.card > summary { font-size: 15px; color: var(--muted); font-weight: 600; cursor: pointer; }
+  details.card[open] > summary { margin-bottom: 8px; }
+  .sub { border-top: 1px solid var(--line); padding: 10px 0 2px; }
+  .sub h3 { font-size: 14px; margin: 0 0 6px; }
   .report { font-size: 14px; text-align: center; }
   .report a { color: var(--accent); font-weight: 700; }
 </style>
@@ -55,40 +65,40 @@
     <h2>층</h2>
     <div class="grid">
       <label>오프라인 층<input id="offlineFloor" type="number" inputmode="numeric" min="1"></label>
-      <label>분당 처치 수 (직접 사냥)<input id="kills" type="number" inputmode="decimal" min="0" placeholder="800"></label>
+      <label>분당 처치 수 (온라인)<input id="kills" type="number" inputmode="decimal" min="0" placeholder="800"></label>
     </div>
-    <p class="note">25층마다 <b>보상이 뛰는 층 · 몬스터가 세지는 층 · 그 직전 층</b>만 보여 줍니다.<br>
-      손익분기가 <b>분당 1,000마리</b>(한 방에 잡을 때 정도)를 넘으면 목록을 멈춥니다.</p>
-  </section>
-
-  <section class="card">
-    <h2>계정</h2>
-    <div class="grid">
-      <label>VIP 레벨<input id="vip" type="number" inputmode="numeric" min="0"></label>
-      <label>요정의 유대 레벨<input id="fairyLevel" type="number" inputmode="numeric" min="0"></label>
-      <label class="toggle"><input id="adRemoved" type="checkbox">광고 제거</label>
-      <label class="toggle"><input id="fairyOn" type="checkbox"><span id="fairyOnText">요정의 축복 켜짐 (직접 사냥)</span></label>
-      <label class="toggle"><input id="ad" type="checkbox">오프라인 광고 보상</label>
-      <label class="toggle"><input id="offlinePackage" type="checkbox">오프라인 보상 패키지</label>
-    </div>
-    <p class="note">요정의 축복을 켜면 경험치·골드가 <b>축복 %의 2배</b>만큼 늘어납니다 (25% → 1.5배).<br>
-      <b>광고 제거:</b> 항상 켜짐, 오프라인에도 적용<br>
-      <b>광고 제거 없음:</b> 직접 사냥에만 적용 (요청 후 1시간만 켜지므로)</p>
-  </section>
-
-  <section class="card">
-    <h2>보너스 (자원별)</h2>
-    <div class="grid" id="bonusGrid"></div>
-    <p class="note"><b>직접 사냥에만:</b> 음식, 이벤트<br>
-      <b>오프라인에도:</b> 길드 스킬, 효과 패키지</p>
+    <p class="note">25층마다 <b>보상이 뛰는 층 · 몬스터가 세지는 층 · 그 직전 층</b>만 보여 줍니다.</p>
   </section>
 
   <section class="card">
     <h2>결과</h2>
-    <p class="note">층마다 적힌 마리 수보다 많이 잡으면 직접 사냥이 이득입니다.</p>
+    <p class="note">층마다 적힌 마리 수보다 많이 잡으면 온라인이 이득입니다.</p>
     <div id="summary" class="summary"></div>
     <div id="rows"></div>
   </section>
+
+  <details class="card" id="settings">
+    <summary>설정 (계정 · 보너스)</summary>
+    <div class="sub">
+      <h3>계정</h3>
+      <div class="grid">
+        <label>VIP 레벨<input id="vip" type="number" inputmode="numeric" min="0"></label>
+        <label>요정의 유대 레벨<input id="fairyLevel" type="number" inputmode="numeric" min="0"></label>
+      </div>
+      <div class="chips">
+        <label class="chip"><input id="adRemoved" type="checkbox">광고 제거</label>
+        <label class="chip"><input id="fairyOn" type="checkbox"><span id="fairyOnText">요정의 축복 (온라인)</span></label>
+        <label class="chip"><input id="ad" type="checkbox">오프라인 광고 보상</label>
+        <label class="chip"><input id="offlinePackage" type="checkbox">오프라인 패키지</label>
+      </div>
+      <p class="note">요정의 축복을 켜면 경험치·골드가 <b>축복 %의 2배</b>만큼 늘어납니다 (25% → 1.5배).<br>
+        <b>광고 제거:</b> 항상 켜짐, 오프라인에도 적용<br>
+        <b>광고 제거 없음:</b> 온라인에만 적용</p>
+    </div>
+    <div id="bonusGroups"></div>
+    <p class="note"><b>온라인에만:</b> 음식, 이벤트<br>
+      <b>오프라인에도:</b> 길드 스킬, 효과 패키지</p>
+  </details>
 
   <section class="card report">
     계산이 이상하거나 넣고 싶은 기능이 있으면
@@ -108,13 +118,14 @@
   const STORE_KEY = 'floor-calc-inputs';
   let data = null;
 
-  const grid = document.getElementById('bonusGrid');
+  const groups = document.getElementById('bonusGroups');
   FloorCalc.RESOURCES.forEach((resource) => {
-    grid.insertAdjacentHTML('beforeend',
-      `<label>${NAMES[resource]} 음식<select id="food_${resource}">${FOODS.map((v) => `<option value="${v}">${v ? v + '%' : '없음'}</option>`).join('')}</select></label>` +
-      `<label>${NAMES[resource]} 길드 스킬 %<input id="guild_${resource}" type="number" inputmode="numeric" min="0"></label>` +
-      `<label class="toggle"><input id="event_${resource}" type="checkbox">${NAMES[resource]} 이벤트 +100%</label>` +
-      `<label class="toggle"><input id="pkg_${resource}" type="checkbox">${NAMES[resource]} 효과 패키지 +100%</label>`);
+    groups.insertAdjacentHTML('beforeend',
+      `<div class="sub"><h3>${NAMES[resource]}</h3><div class="grid">` +
+      `<label>음식<select id="food_${resource}">${FOODS.map((v) => `<option value="${v}">${v ? v + '%' : '없음'}</option>`).join('')}</select></label>` +
+      `<label>길드 스킬 %<input id="guild_${resource}" type="number" inputmode="numeric" min="0"></label></div>` +
+      `<div class="chips"><label class="chip"><input id="event_${resource}" type="checkbox">이벤트 +100%</label>` +
+      `<label class="chip"><input id="pkg_${resource}" type="checkbox">효과 패키지 +100%</label></div></div>`);
   });
 
   const ids = ['offlineFloor', 'kills', 'vip', 'fairyLevel', 'adRemoved', 'fairyOn', 'ad', 'offlinePackage'];
@@ -153,7 +164,7 @@
     const removed = el('adRemoved').checked;
     if (removed) el('fairyOn').checked = true;
     el('fairyOn').disabled = removed;
-    el('fairyOnText').textContent = removed ? '요정의 축복 상시 켜짐 (광고 제거)' : '요정의 축복 켜짐 (직접 사냥)';
+    el('fairyOnText').textContent = removed ? '요정의 축복 상시 (광고 제거)' : '요정의 축복 (온라인)';
   }
 
   function render() {
@@ -180,11 +191,11 @@
     const offRate = FloorCalc.offlinePerMinute(input);
     const bonusText = FloorCalc.RESOURCES.map((r) => {
       const b = FloorCalc.bonusPercent(input, r);
-      return `${NAMES[r]} ${b.offline}% → ${b.online}%`;
-    }).join(' · ');
+      return `${NAMES[r]} ${b.offline}% / ${b.online}%`;
+    }).join('<br>');
     summary.innerHTML = `오프라인 ${input.offlineFloor}층 · 분당 ${Math.round(offRate)}마리 · 1마리 ${FloorCalc.formatGame(FloorCalc.rewardLog(data, input.offlineFloor, 'gold'))}<br>` +
-      `보너스 (오프라인 → 직접): ${bonusText}<br>` +
-      `x는 분당 ${kills}마리 잡을 때 오프라인보다 몇 배인지`;
+      `보너스 (오프라인/온라인)<br>${bonusText}<br>` +
+      `배수: 분당 ${kills}마리 잡을 때 오프라인 대비`;
 
     const parts = [];
     for (const { floor, kind } of floors) {
@@ -192,7 +203,7 @@
       const needs = Object.fromEntries(FloorCalc.RESOURCES.map((r) => [r, FloorCalc.breakeven(data, input, floor, r)]));
       const vals = FloorCalc.RESOURCES.map((r) => {
         const ratio = kills ? kills / needs[r] : null;
-        const ratioText = ratio === null ? '' : `<span class="${ratio >= 1 ? 'good' : 'bad'}">x${ratio.toFixed(2)}</span>`;
+        const ratioText = ratio === null ? '' : `<span class="${ratio >= 1 ? 'good' : 'bad'}">${ratio.toFixed(2)}배</span>`;
         return `<div class="val">${NAMES[r]}<b>${needs[r].toFixed(0)}마리</b>${ratioText}</div>`;
       }).join('');
       parts.push(`<div class="row"><span class="floor">${floor}층</span> · ${kind} · 1마리 ${FloorCalc.formatGame(FloorCalc.rewardLog(data, floor, 'gold'))}<div class="vals">${vals}</div></div>`);
@@ -205,6 +216,8 @@
   }
 
   load();
+  // 처음 쓰는 사람 (저장된 오프라인 층 없음) 은 설정을 펼쳐 보여 줌, 이후엔 접힌 채로
+  el('settings').open = !el('offlineFloor').value;
   syncFairy();
   document.querySelectorAll('input, select').forEach((node) => node.addEventListener('input', render));
   fetch('stages.json').then((r) => r.json()).then((json) => {
