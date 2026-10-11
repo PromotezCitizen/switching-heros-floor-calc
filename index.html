@@ -54,10 +54,8 @@
     <div class="grid">
       <label>오프라인 층<input id="offlineFloor" type="number" inputmode="numeric" min="1"></label>
       <label>분당 처치 수 (직접 사냥)<input id="kills" type="number" inputmode="decimal" min="0"></label>
-      <label>볼 층 시작<input id="fromFloor" type="number" inputmode="numeric" min="1"></label>
-      <label>볼 층 끝<input id="toFloor" type="number" inputmode="numeric" min="1"></label>
     </div>
-    <p class="note">시작·끝을 비우면 오프라인 층부터 50층 아래까지 봅니다.</p>
+    <p class="note">오프라인 층부터 아래로 25층 구간마다 벽 직후 (25n+1, 보상이 뛰는 층) 와 벽 직전 (25n−1, 몬스터 체력이 뛰기 전 층) 만 보여 줍니다. 분당 처치 수를 넣으면 경험치·골드 손익분기가 그 수를 넘는 층에서 멈춥니다.</p>
   </section>
 
   <section class="card">
@@ -90,7 +88,8 @@
 (function () {
   const NAMES = { exp: '경험치', gold: '골드', ess: '정수' };
   const FOODS = [0, 25, 60, 125];
-  const SCAN_DEPTH = 50;
+  const WALL_STEP = 25;
+  const MAX_BLOCKS_WITHOUT_KILLS = 20;
   const MAX_ROWS = 300;
   const STORE_KEY = 'floor-calc-inputs';
   let data = null;
@@ -104,7 +103,7 @@
       `<label class="toggle"><input id="pkg_${resource}" type="checkbox">${NAMES[resource]} 효과 패키지 +100%</label>`);
   });
 
-  const ids = ['offlineFloor', 'kills', 'fromFloor', 'toFloor', 'vip', 'fairyLevel', 'adRemoved', 'fairyOn', 'ad', 'offlinePackage'];
+  const ids = ['offlineFloor', 'kills', 'vip', 'fairyLevel', 'adRemoved', 'fairyOn', 'ad', 'offlinePackage'];
   FloorCalc.RESOURCES.forEach((r) => ids.push('food_' + r, 'guild_' + r, 'event_' + r, 'pkg_' + r));
   const el = (id) => document.getElementById(id);
   const num = (id) => { const v = parseFloat(el(id).value); return isFinite(v) ? v : 0; };
@@ -146,10 +145,13 @@
       return;
     }
     const kills = num('kills');
-    let from = Math.floor(num('fromFloor')) || input.offlineFloor;
-    let to = Math.floor(num('toFloor')) || Math.max(1, input.offlineFloor - SCAN_DEPTH);
-    from = Math.min(Math.max(from, 1), data.count); to = Math.min(Math.max(to, 1), data.count);
-    const step = to >= from ? 1 : -1;
+    // 25층 구간마다 벽 직후 (25n+1) 와 벽 직전 (25n-1) 만, 오프라인 층부터 아래로
+    const floors = [];
+    for (let wall = Math.floor(input.offlineFloor / WALL_STEP) * WALL_STEP; wall >= WALL_STEP; wall -= WALL_STEP) {
+      if (wall + 1 <= input.offlineFloor) floors.push({ floor: wall + 1, kind: '벽 직후' });
+      floors.push({ floor: wall - 1, kind: '벽 직전' });
+      if (!kills && floors.length >= MAX_BLOCKS_WITHOUT_KILLS * 2) break;
+    }
 
     const offRate = FloorCalc.offlinePerMinute(input);
     const offLines = FloorCalc.RESOURCES.map((r) => {
@@ -160,17 +162,20 @@
       ` · 1마리 ${FloorCalc.formatGame(FloorCalc.rewardLog(data, input.offlineFloor, 'gold'))} (경험치·골드)<br>` +
       offLines.join('<br>') + (kills ? `<br>직접 사냥 분당 ${kills}마리 기준 배수 표시 (1 이상이면 직접 사냥이 이득)` : '');
 
-    let count = 0;
     const parts = [];
-    for (let floor = from; step > 0 ? floor <= to : floor >= to; floor += step) {
-      if (++count > MAX_ROWS) { parts.push(`<p class="note">${MAX_ROWS}층까지만 표시했습니다.</p>`); break; }
+    for (const { floor, kind } of floors) {
+      if (parts.length >= MAX_ROWS) break;
+      const needs = Object.fromEntries(FloorCalc.RESOURCES.map((r) => [r, FloorCalc.breakeven(data, input, floor, r)]));
       const vals = FloorCalc.RESOURCES.map((r) => {
-        const need = FloorCalc.breakeven(data, input, floor, r);
-        const ratio = kills ? kills / need : null;
+        const ratio = kills ? kills / needs[r] : null;
         const ratioText = ratio === null ? '' : `<span class="${ratio >= 1 ? 'good' : 'bad'}">x${ratio.toFixed(2)}</span>`;
-        return `<div class="val">${NAMES[r]}<b>${need.toFixed(0)}마리</b>${ratioText}</div>`;
+        return `<div class="val">${NAMES[r]}<b>${needs[r].toFixed(0)}마리</b>${ratioText}</div>`;
       }).join('');
-      parts.push(`<div class="row"><span class="floor">${floor}층</span> · 1마리 ${FloorCalc.formatGame(FloorCalc.rewardLog(data, floor, 'gold'))}<div class="vals">${vals}</div></div>`);
+      parts.push(`<div class="row"><span class="floor">${floor}층</span> · ${kind} · 1마리 ${FloorCalc.formatGame(FloorCalc.rewardLog(data, floor, 'gold'))}<div class="vals">${vals}</div></div>`);
+      if (kills && needs.exp > kills) {
+        parts.push(`<p class="note">여기부터 아래 층은 경험치·골드 손익분기가 분당 ${kills}마리를 넘어 오프라인보다 손해입니다.</p>`);
+        break;
+      }
     }
     rows.innerHTML = parts.join('');
   }
