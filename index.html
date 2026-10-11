@@ -243,7 +243,9 @@
         const ratioText = ratio === null ? '' : `<span class="${tone}">${ratio.toFixed(2)}배</span>`;
         return `<div class="val">${NAMES[r]}<b class="${tone}">${needs[r].toFixed(0)}마리</b>${ratioText}</div>`;
       }).join('');
-      parts.push(`<div class="row"><span class="floor">${floor}층</span> · ${kind} · 1마리 ${FloorCalc.formatGame(FloorCalc.rewardLog(data, floor, 'gold'))}<div class="vals">${vals}</div></div>`);
+      // 벽 층 (25n) 은 몬스터 체력이 오르는데 보상은 다음 층부터 올라 머물기 손해
+      const notRecommended = floor % WALL_STEP === 0 ? ' · <b class="bad">비추천</b>' : '';
+      parts.push(`<div class="row"><span class="floor">${floor}층</span> · ${kind}${notRecommended} · 1마리 ${FloorCalc.formatGame(FloorCalc.rewardLog(data, floor, 'gold'))}<div class="vals">${vals}</div></div>`);
       if (needs.exp > Math.max(kills, CUT_KILLS)) {
         parts.push(`<p class="note">여기부터 아래는 오프라인이 더 낫습니다.</p>`);
         break;
