@@ -1,10 +1,9 @@
 /*
- * 층수 계산기 계산 (화면과 분리, 브라우저와 node 둘 다에서 씀).
- * 게임 코드 기준 (claude-docs/react-port/hunting-always-bonus.md):
- * - 스테이지 1마리 보상 = 표 기본 보상 x (1 + 보너스 합 % / 100), 보너스는 전부 더함
- * - 요정의 축복은 보상 계산에서 두 번 더해짐 (경험치·골드만, 정수 없음)
- * - 오프라인과 직접 사냥 공통: 요정 x2, VIP 사냥 보너스, 길드 스킬, 상점 효과 패키지 (+100, 오프라인 포함은 유력)
- * - 직접 사냥만: 음식, 효과 버프 아이템 (이벤트 +100)
+ * 온라인 효율 계산기 계산 (화면과 분리, 브라우저와 node 둘 다에서 씀).
+ * - 스테이지 1마리 보상 = 층 기본 보상 x (1 + 보너스 합 % / 100), 보너스는 전부 더함
+ * - 요정의 축복: 경험치·골드에 축복 %의 2배 (획득 기록 실측: 25% → 1.5배, 50% → 2배), 정수 없음
+ * - 오프라인과 온라인 공통: 요정 x2 (켜진 칸), VIP 사냥 보너스, 길드 스킬, 상점 효과 패키지 (+100)
+ * - 온라인만: 음식, 효과 버프 아이템 (이벤트 +100)
  * - 오프라인 처치 수 = (200 + 패키지 20) 마리 / (60 - VIP 시간 감소 - 패키지 10) 초, 광고 배수 = 1 + (20 + VIP + 패키지 20) / 100
  */
 (function (root) {
@@ -43,17 +42,17 @@
 
   /**
    * 자원별 보너스 % : { offline, online }
-   * 요정의 축복: 광고 제거면 상시 (직접 사냥·오프라인 모두), 아니면 요청해서 1시간만 켜지므로
-   * 직접 사냥은 fairyOn 칸을 따르고 오프라인 (몇 시간 단위) 에는 넣지 않음.
+   * 요정의 축복: 광고 제거면 상시, 아니면 경험치·골드 칸을 광고로 따로 1시간씩 켬.
+   * 켜진 칸은 온라인·오프라인 모두 적용. 오프라인은 접속하는 순간 켜져 있으면 전체에, 그 전에 꺼지면 적용 안 됨
+   * (실측: 골드만 켜고 4분 → 골드만 x1.518, 켜고 1시간 3분 → 도중에 꺼져 x1).
    */
   function bonusPercent(input, resource) {
     const fairyValue = resource === 'ess' ? 0 : fairyPercent(input.fairyLevel, true) * FAIRY.times;
-    const fairyOnline = input.adRemoved || input.fairyOn ? fairyValue : 0;
-    const fairyOffline = input.adRemoved ? fairyValue : 0;
+    const fairy = input.adRemoved || (input.fairyOn && input.fairyOn[resource]) ? fairyValue : 0;
     const common = vipOnline(input.vip, resource) + (input.guild[resource] || 0)
-      + (input.effectPackage[resource] ? EFFECT_PACKAGE_PERCENT : 0);
-    const online = common + fairyOnline + (input.food[resource] || 0) + (input.event[resource] ? EVENT_PERCENT : 0);
-    return { offline: common + fairyOffline, online };
+      + (input.effectPackage[resource] ? EFFECT_PACKAGE_PERCENT : 0) + fairy;
+    const online = common + (input.food[resource] || 0) + (input.event[resource] ? EVENT_PERCENT : 0);
+    return { offline: common, online };
   }
 
   /** 층 보상 log10 (데이터: 가수 x100 정수 + 지수) */
@@ -63,7 +62,7 @@
     return Math.log10(data[key + 'M'][index]) + data[key + 'E'][index];
   }
 
-  /** 직접 사냥 층에서 오프라인과 같아지는 분당 처치 수 */
+  /** 온라인 사냥 층에서 오프라인과 같아지는 분당 처치 수 */
   function breakeven(data, input, floor, resource) {
     const bonus = bonusPercent(input, resource);
     const offlineLog = rewardLog(data, input.offlineFloor, resource) + Math.log10(1 + bonus.offline / 100);
