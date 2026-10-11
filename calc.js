@@ -43,7 +43,8 @@
   /**
    * 자원별 보너스 % : { offline, online }
    * 요정의 축복: 광고 제거면 상시, 아니면 경험치·골드 칸을 광고로 따로 1시간씩 켬.
-   * 켜진 칸은 온라인·오프라인 모두 적용 (오프라인은 접속할 때까지 켜져 있어야 함, 실측: 골드만 켜고 4분 → 골드만 x1.518).
+   * 켜진 칸은 온라인·오프라인 모두 적용. 오프라인은 접속하는 순간 켜져 있으면 전체에, 그 전에 꺼지면 적용 안 됨
+   * (실측: 골드만 켜고 4분 → 골드만 x1.518, 켜고 1시간 3분 → 도중에 꺼져 x1).
    */
   function bonusPercent(input, resource) {
     const fairyValue = resource === 'ess' ? 0 : fairyPercent(input.fairyLevel, true) * FAIRY.times;

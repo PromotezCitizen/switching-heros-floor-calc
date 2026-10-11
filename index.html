@@ -118,7 +118,7 @@
       </div>
       <p class="note">요정의 축복을 켜면 경험치·골드가 <b>축복 %의 2배</b>만큼 늘어납니다 (25% → 1.5배).<br>
         <b>광고 제거:</b> 항상 켜짐, 오프라인에도 적용<br>
-        <b>광고로 켠 경우:</b> 켜진 칸에만 적용, 오프라인은 접속할 때까지 켜져 있어야 적용</p>
+        <b>광고로 켠 경우:</b> 켜진 칸에만 적용, 오프라인은 접속 시 활성화 되어있는 경우 적용</p>
     </div>
     <div id="bonusGroups"></div>
     <p class="note"><b>온라인에만:</b> 음식, 이벤트<br>
@@ -239,8 +239,9 @@
       const needs = Object.fromEntries(FloorCalc.RESOURCES.map((r) => [r, FloorCalc.breakeven(data, input, floor, r)]));
       const vals = FloorCalc.RESOURCES.map((r) => {
         const ratio = kills ? kills / needs[r] : null;
-        const ratioText = ratio === null ? '' : `<span class="${ratio >= 1 ? 'good' : 'bad'}">${ratio.toFixed(2)}배</span>`;
-        return `<div class="val">${NAMES[r]}<b>${needs[r].toFixed(0)}마리</b>${ratioText}</div>`;
+        const tone = ratio === null ? '' : ratio >= 1 ? 'good' : 'bad';
+        const ratioText = ratio === null ? '' : `<span class="${tone}">${ratio.toFixed(2)}배</span>`;
+        return `<div class="val">${NAMES[r]}<b class="${tone}">${needs[r].toFixed(0)}마리</b>${ratioText}</div>`;
       }).join('');
       parts.push(`<div class="row"><span class="floor">${floor}층</span> · ${kind} · 1마리 ${FloorCalc.formatGame(FloorCalc.rewardLog(data, floor, 'gold'))}<div class="vals">${vals}</div></div>`);
       if (needs.exp > Math.max(kills, CUT_KILLS)) {
