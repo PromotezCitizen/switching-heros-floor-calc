@@ -42,20 +42,23 @@
   .val b { display: block; font-size: 15px; }
   .good { color: var(--good); } .bad { color: var(--bad); }
   #status { font-size: 13px; color: var(--muted); }
+  .report { font-size: 14px; text-align: center; }
+  .report a { color: var(--accent); font-weight: 700; }
 </style>
 </head>
 <body>
 <main>
   <h1>층수 계산기</h1>
-  <p id="status">데이터 불러오는 중…</p>
+  <p id="status">불러오는 중…</p>
 
   <section class="card">
     <h2>층</h2>
     <div class="grid">
       <label>오프라인 층<input id="offlineFloor" type="number" inputmode="numeric" min="1"></label>
-      <label>분당 처치 수 (직접 사냥)<input id="kills" type="number" inputmode="decimal" min="0"></label>
+      <label>분당 처치 수 (직접 사냥)<input id="kills" type="number" inputmode="decimal" min="0" placeholder="800"></label>
     </div>
-    <p class="note">오프라인 층 (현재 층) 부터 아래로 25층 구간마다 벽 직후 (25n+1, 보상이 뛰는 층), 벽 (25n, 몬스터 체력이 뛰는 층), 벽 직전 (25n−1) 만 보여 줍니다. 분당 처치 수를 넣으면 경험치·골드 손익분기가 그 수를 넘는 층에서 멈춥니다.</p>
+    <p class="note">25층마다 <b>보상이 뛰는 층 · 몬스터가 세지는 층 · 그 직전 층</b>만 보여 줍니다.<br>
+      손익분기가 <b>분당 1,000마리</b>(한 방에 잡을 때 정도)를 넘으면 목록을 멈춥니다.</p>
   </section>
 
   <section class="card">
@@ -64,23 +67,32 @@
       <label>VIP 레벨<input id="vip" type="number" inputmode="numeric" min="0"></label>
       <label>요정의 유대 레벨<input id="fairyLevel" type="number" inputmode="numeric" min="0"></label>
       <label class="toggle"><input id="adRemoved" type="checkbox">광고 제거</label>
-      <label class="toggle"><input id="fairyOn" type="checkbox">요정의 축복 켜짐 (직접 사냥)</label>
+      <label class="toggle"><input id="fairyOn" type="checkbox"><span id="fairyOnText">요정의 축복 켜짐 (직접 사냥)</span></label>
       <label class="toggle"><input id="ad" type="checkbox">오프라인 광고 보상</label>
       <label class="toggle"><input id="offlinePackage" type="checkbox">오프라인 보상 패키지</label>
     </div>
-    <p class="note">요정의 축복은 게임 보상 계산에서 두 번 더해집니다 (경험치·골드만). 광고 제거면 직접 사냥·오프라인 모두 상시, 아니면 요청해서 1시간만 켜지므로 직접 사냥에만 넣고 오프라인에는 넣지 않습니다.</p>
+    <p class="note">요정의 축복을 켜면 경험치·골드가 <b>축복 %의 2배</b>만큼 늘어납니다 (25% → 1.5배).<br>
+      <b>광고 제거:</b> 항상 켜짐, 오프라인에도 적용<br>
+      <b>광고 제거 없음:</b> 직접 사냥에만 적용 (요청 후 1시간만 켜지므로)</p>
   </section>
 
   <section class="card">
     <h2>보너스 (자원별)</h2>
     <div class="grid" id="bonusGrid"></div>
-    <p class="note">음식·이벤트는 직접 사냥에만, 길드 스킬·효과 패키지는 오프라인에도 붙습니다 (효과 패키지 오프라인 포함은 게임 코드 기준, 실측 안 됨).</p>
+    <p class="note"><b>직접 사냥에만:</b> 음식, 이벤트<br>
+      <b>오프라인에도:</b> 길드 스킬, 효과 패키지</p>
   </section>
 
   <section class="card">
     <h2>결과</h2>
+    <p class="note">층마다 적힌 마리 수보다 많이 잡으면 직접 사냥이 이득입니다.</p>
     <div id="summary" class="summary"></div>
     <div id="rows"></div>
+  </section>
+
+  <section class="card report">
+    계산이 이상하거나 넣고 싶은 기능이 있으면
+    <a href="https://docs.google.com/forms/d/e/1FAIpQLSfmcH7NM7QumUckh_tdUuuk_VmXXNBT5JLEygmdB1jTY1A0RQ/viewform?usp=pp_url&amp;entry.1594761751=0%25(%EC%97%86%EC%9D%8C)&amp;entry.506801763=0%25(%EC%97%86%EC%9D%8C)&amp;entry.1270816294=0%25(%EC%97%86%EC%9D%8C)&amp;entry.1020448729=X&amp;entry.135084558=X&amp;entry.1144504272=X" target="_blank" rel="noopener">제보 바랍니다</a>
   </section>
 </main>
 <script src="calc.js"></script>
@@ -89,7 +101,9 @@
   const NAMES = { exp: '경험치', gold: '골드', ess: '정수' };
   const FOODS = [0, 25, 60, 125];
   const WALL_STEP = 25;
-  const MAX_BLOCKS_WITHOUT_KILLS = 20;
+  const DEFAULT_KILLS = 800;
+  /** 목록을 자르는 손익분기 (한 방에 잡으면 분당 1000마리 안팎) — 처치 수를 더 크게 넣으면 그 수 */
+  const CUT_KILLS = 1000;
   const MAX_ROWS = 300;
   const STORE_KEY = 'floor-calc-inputs';
   let data = null;
@@ -134,7 +148,16 @@
     };
   }
 
+  /** 광고 제거면 요정의 축복은 상시 켜짐: 칸을 켜고 잠금 */
+  function syncFairy() {
+    const removed = el('adRemoved').checked;
+    if (removed) el('fairyOn').checked = true;
+    el('fairyOn').disabled = removed;
+    el('fairyOnText').textContent = removed ? '요정의 축복 상시 켜짐 (광고 제거)' : '요정의 축복 켜짐 (직접 사냥)';
+  }
+
   function render() {
+    syncFairy();
     save();
     if (!data) return;
     const input = readInput();
@@ -144,7 +167,7 @@
       summary.textContent = `오프라인 층을 넣어 주세요 (1 ~ ${data.count}).`;
       return;
     }
-    const kills = num('kills');
+    const kills = num('kills') || DEFAULT_KILLS;
     // 현재 층 (25n+1 이 아니면) 다음, 25층 구간마다 벽 직후 (25n+1) · 벽 (25n) · 벽 직전 (25n-1), 오프라인 층부터 아래로
     const floors = [];
     if (input.offlineFloor % WALL_STEP !== 1) floors.push({ floor: input.offlineFloor, kind: '현재 층' });
@@ -152,17 +175,16 @@
       if (wall + 1 <= input.offlineFloor) floors.push({ floor: wall + 1, kind: '벽 직후' });
       if (wall < input.offlineFloor) floors.push({ floor: wall, kind: '벽' });
       floors.push({ floor: wall - 1, kind: '벽 직전' });
-      if (!kills && floors.length >= MAX_BLOCKS_WITHOUT_KILLS * 3) break;
     }
 
     const offRate = FloorCalc.offlinePerMinute(input);
-    const offLines = FloorCalc.RESOURCES.map((r) => {
+    const bonusText = FloorCalc.RESOURCES.map((r) => {
       const b = FloorCalc.bonusPercent(input, r);
-      return `${NAMES[r]} 보너스 오프라인 ${b.offline}% / 직접 ${b.online}%`;
-    });
-    summary.innerHTML = `오프라인 ${input.offlineFloor}층: 분당 ${offRate.toFixed(1)}마리` +
-      ` · 1마리 ${FloorCalc.formatGame(FloorCalc.rewardLog(data, input.offlineFloor, 'gold'))} (경험치·골드)<br>` +
-      offLines.join('<br>') + (kills ? `<br>직접 사냥 분당 ${kills}마리 기준 배수 표시 (1 이상이면 직접 사냥이 이득)` : '');
+      return `${NAMES[r]} ${b.offline}% → ${b.online}%`;
+    }).join(' · ');
+    summary.innerHTML = `오프라인 ${input.offlineFloor}층 · 분당 ${Math.round(offRate)}마리 · 1마리 ${FloorCalc.formatGame(FloorCalc.rewardLog(data, input.offlineFloor, 'gold'))}<br>` +
+      `보너스 (오프라인 → 직접): ${bonusText}<br>` +
+      `x는 분당 ${kills}마리 잡을 때 오프라인보다 몇 배인지`;
 
     const parts = [];
     for (const { floor, kind } of floors) {
@@ -174,8 +196,8 @@
         return `<div class="val">${NAMES[r]}<b>${needs[r].toFixed(0)}마리</b>${ratioText}</div>`;
       }).join('');
       parts.push(`<div class="row"><span class="floor">${floor}층</span> · ${kind} · 1마리 ${FloorCalc.formatGame(FloorCalc.rewardLog(data, floor, 'gold'))}<div class="vals">${vals}</div></div>`);
-      if (kills && needs.exp > kills) {
-        parts.push(`<p class="note">여기부터 아래 층은 경험치·골드 손익분기가 분당 ${kills}마리를 넘어 오프라인보다 손해입니다.</p>`);
+      if (needs.exp > Math.max(kills, CUT_KILLS)) {
+        parts.push(`<p class="note">여기부터 아래는 오프라인이 더 낫습니다.</p>`);
         break;
       }
     }
@@ -183,12 +205,13 @@
   }
 
   load();
+  syncFairy();
   document.querySelectorAll('input, select').forEach((node) => node.addEventListener('input', render));
   fetch('stages.json').then((r) => r.json()).then((json) => {
     data = json;
-    el('status').textContent = `층 ${json.count.toLocaleString('ko-KR')}개 · 손익분기 = 오프라인과 같아지는 직접 사냥 분당 처치 수`;
+    el('status').hidden = true;
     render();
-  }).catch(() => { el('status').textContent = '데이터를 불러오지 못했습니다 (stages.json).'; });
+  }).catch(() => { el('status').textContent = '데이터를 불러오지 못했습니다. 새로고침해 주세요.'; });
 })();
 </script>
 </body>
