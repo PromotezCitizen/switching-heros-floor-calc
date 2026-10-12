@@ -27,6 +27,8 @@
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
   .card h2 { font-size: 15px; margin: 0 0 8px; color: var(--muted); font-weight: 600; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  /* 세 칸 한 줄, 좁은 화면에서는 줄바꿈 대신 가로로 밀림 */
+  .grid.three { grid-template-columns: repeat(3, minmax(96px, 1fr)); overflow-x: auto; }
   label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
   input[type=number], select { font-size: 16px; padding: 8px; border: 1px solid var(--line); border-radius: 8px;
     background: var(--bg); color: var(--text); width: 100%; }
@@ -90,11 +92,17 @@
       <label>분당 처치 수 (온라인)<input id="kills" type="number" inputmode="decimal" min="0" placeholder="800"></label>
     </div>
     <p class="note">25층마다 <b>보상이 뛰는 층 · 몬스터가 세지는 층 · 그 직전 층</b>만 보여 줍니다.</p>
+    <div class="grid three">
+      <label>현재 레벨<input id="currentLevel" type="number" inputmode="numeric" min="1"></label>
+      <label>현재 경험치 %<input id="currentExpPercent" type="number" inputmode="decimal" min="0" max="100" step="0.1"></label>
+      <label>목표 레벨<input id="targetLevel" type="number" inputmode="numeric" min="1"></label>
+    </div>
+    <p class="note">레벨을 넣으면 층마다 목표 레벨까지 걸리는 시간을 보여 줍니다. 경험치 % 는 레벨 막대의 값 (비우면 0%).</p>
   </section>
 
   <section class="card">
     <h2>결과</h2>
-    <p class="note">층마다 적힌 마리 수보다 많이 잡으면 온라인이 이득입니다.</p>
+    <p class="note">층마다 적힌 분당 마리 수보다 많이 잡으면 온라인이 이득입니다.</p>
     <div id="summary" class="summary"></div>
     <div id="rows"></div>
   </section>
@@ -160,7 +168,9 @@
       `<label class="chip"><input id="pkg_${resource}" type="checkbox">효과 패키지 +100%</label></div></div>`);
   });
 
-  const ids = ['offlineFloor', 'kills', 'vip', 'fairyLevel', 'adRemoved', 'ad', 'offlinePackage'];
+  const MINUTES_PER_HOUR = 60;
+  const HOURS_PER_DAY = 24;
+  const ids = ['offlineFloor', 'kills', 'vip', 'fairyLevel', 'adRemoved', 'ad', 'offlinePackage', 'currentLevel', 'currentExpPercent', 'targetLevel'];
   FloorCalc.RESOURCES.forEach((r) => ids.push('food_' + r, 'guild_' + r, 'event_' + r, 'pkg_' + r));
   FAIRY_RESOURCES.forEach((r) => ids.push('fairy_' + r));
   const el = (id) => document.getElementById(id);
@@ -193,6 +203,30 @@
       food: per('food_', num), guild: per('guild_', num),
       event: per('event_', (id) => el(id).checked), effectPackage: per('pkg_', (id) => el(id).checked),
     };
+  }
+
+  /** 걸리는 시간 글: 전체 분을 올림한 뒤 시간·분으로 나눔 (60분은 시간으로 넘어감, 0분은 생략), 하루 이상은 시간 (일) */
+  function formatDuration(minutes) {
+    if (!isFinite(minutes)) return '-';
+    const totalMinutes = Math.max(1, Math.ceil(minutes));
+    const hours = Math.floor(totalMinutes / MINUTES_PER_HOUR);
+    const restMinutes = totalMinutes % MINUTES_PER_HOUR;
+    if (hours === 0) return `${restMinutes}분`;
+    if (hours >= HOURS_PER_DAY) {
+      const roundedHours = Math.ceil(totalMinutes / MINUTES_PER_HOUR);
+      return `${roundedHours.toLocaleString('ko-KR')}시간 (${(roundedHours / HOURS_PER_DAY).toFixed(1)}일)`;
+    }
+    return restMinutes === 0 ? `${hours}시간` : `${hours}시간 ${restMinutes}분`;
+  }
+
+  // 목표까지 필요 경험치는 레벨 칸이 바뀔 때만 다시 계산 (레벨 차가 크면 반복이 길어짐)
+  let targetCache = { key: '', log: null };
+  function expToTargetLog() {
+    const key = [el('currentLevel').value, el('currentExpPercent').value, el('targetLevel').value].join('|');
+    if (key !== targetCache.key) {
+      targetCache = { key, log: FloorCalc.expToTargetLog(Math.floor(num('currentLevel')), num('currentExpPercent'), Math.floor(num('targetLevel'))) };
+    }
+    return targetCache.log;
   }
 
   /** 광고 제거면 요정의 축복은 상시 켜짐: 칸을 켜고 잠금 */
@@ -234,6 +268,24 @@
       `<tr><th>분당 처치</th><td>${Math.round(offRate)}마리</td><td>${kills}마리</td></tr>${bonusRows}</tbody></table>`;
 
     const parts = [`<p class="note">배수 = 분당 ${kills}마리로 잡을 때 오프라인 대비</p>`];
+    // 레벨 칸이 비었거나 목표가 현재 이하면 null → 시간 줄 없음
+    const targetLog = expToTargetLog();
+    const expBonus = FloorCalc.bonusPercent(input, 'exp');
+    const targetText = (floor) => {
+      if (targetLog === null) return '';
+      const rewardLog = FloorCalc.rewardLog(data, floor, 'exp');
+      const onlineLog = Math.log10(kills) + rewardLog + Math.log10(1 + expBonus.online / 100);
+      const offlineLog = Math.log10(offRate) + rewardLog + Math.log10(1 + expBonus.offline / 100);
+      const online = formatDuration(Math.pow(10, targetLog - onlineLog));
+      const offline = formatDuration(Math.pow(10, targetLog - offlineLog));
+      return `<div class="note">목표 레벨까지 온라인 ${online} · 오프라인 ${offline}</div>`;
+    };
+    // 도시락 (중급, 1시간) 은 최고 층 기준이라 층마다 같음 → 오프라인 층을 최고 층으로 보고 한 줄
+    if (targetLog !== null) {
+      const lunchboxMinutes = Math.pow(10, targetLog - FloorCalc.lunchboxPerMinuteLog(data, input, input.offlineFloor, 'exp'));
+      const boxes = Math.ceil(lunchboxMinutes / FloorCalc.LUNCHBOX_MINUTES.medium).toLocaleString('ko-KR');
+      parts.push(`<p class="note">목표 레벨까지 도시락 ${boxes}개</p>`);
+    }
     for (const { floor, kind } of floors) {
       if (parts.length >= MAX_ROWS) break;
       const needs = Object.fromEntries(FloorCalc.RESOURCES.map((r) => [r, FloorCalc.breakeven(data, input, floor, r)]));
@@ -245,7 +297,7 @@
       }).join('');
       // 벽 층 (25n) 은 몬스터 체력이 오르는데 보상은 다음 층부터 올라 머물기 손해
       const notRecommended = floor % WALL_STEP === 0 ? ' · <b class="bad">비추천</b>' : '';
-      parts.push(`<div class="row"><span class="floor">${floor}층</span> · ${kind}${notRecommended} · 1마리 ${FloorCalc.formatGame(FloorCalc.rewardLog(data, floor, 'gold'))}<div class="vals">${vals}</div></div>`);
+      parts.push(`<div class="row"><span class="floor">${floor}층</span> · ${kind}${notRecommended} · 1마리 ${FloorCalc.formatGame(FloorCalc.rewardLog(data, floor, 'gold'))}<div class="vals">${vals}</div>${targetText(floor)}</div>`);
       if (needs.exp > Math.max(kills, CUT_KILLS)) {
         parts.push(`<p class="note">여기부터 아래는 오프라인이 더 낫습니다.</p>`);
         break;
