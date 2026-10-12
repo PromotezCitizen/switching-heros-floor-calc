@@ -5,6 +5,7 @@
  * - 오프라인과 온라인 공통: 요정 x2 (켜진 칸), VIP 사냥 보너스, 길드 스킬, 상점 효과 패키지 (+100)
  * - 온라인만: 음식, 효과 버프 아이템 (이벤트 +100)
  * - 오프라인 처치 수 = (200 + 패키지 20) 마리 / (60 - VIP 시간 감소 - 패키지 10) 초, 광고 배수 = 1 + (20 + VIP + 패키지 20) / 100
+ * - 목표 레벨까지 시간 = (목표까지 누적 필요 경험치 - 지금 모은 경험치) / 그 층의 분당 경험치 (1마리 경험치 = 골드)
  */
 (function (root) {
   const RESOURCES = ['exp', 'gold', 'ess'];
@@ -31,13 +32,24 @@
     return vip >= secondLevel ? secondValue : vip >= firstLevel ? firstValue : 0;
   }
 
-  /** 오프라인 분당 처치 수 */
-  function offlinePerMinute(input) {
+  /** 오프라인 분당 처치 수 (alwaysAd = 광고 보상 칸과 상관없이 광고 배수를 넣음, 도시락용) */
+  function offlinePerMinute(input, alwaysAd = false) {
     const pkg = input.offlinePackage;
     const kills = OFFLINE.kills + (pkg ? OFFLINE.pkgKills : 0);
     const seconds = OFFLINE.seconds - pick(VIP_TIME_DOWN, input.vip) - (pkg ? OFFLINE.pkgSeconds : 0);
-    const ad = input.ad ? 1 + (OFFLINE.adPercent + pick(VIP_AD_UP, input.vip) + (pkg ? OFFLINE.pkgAdPercent : 0)) / 100 : 1;
+    const withAd = alwaysAd || input.ad;
+    const ad = withAd ? 1 + (OFFLINE.adPercent + pick(VIP_AD_UP, input.vip) + (pkg ? OFFLINE.pkgAdPercent : 0)) / 100 : 1;
     return (kills / seconds) * ad * 60;
+  }
+
+  /*
+   * 도시락 (먹으면 오프라인 보상을 그 시간만큼 바로 받음, 중급 1시간). 먹은 층이 아니라 최고 층 기준.
+   * 보상 1분 = 오프라인 처치 (광고 배수 항상 포함) x 최고 층 1마리 x 오프라인 보너스
+   */
+  const LUNCHBOX_MINUTES = { medium: 60 };
+  function lunchboxPerMinuteLog(data, input, highestFloor, resource) {
+    const bonus = bonusPercent(input, resource);
+    return Math.log10(offlinePerMinute(input, true)) + rewardLog(data, highestFloor, resource) + Math.log10(1 + bonus.offline / 100);
   }
 
   /**
@@ -86,7 +98,80 @@
     return mantissa.toFixed(2) + letters;
   }
 
-  const api = { RESOURCES, offlinePerMinute, bonusPercent, rewardLog, breakeven, formatGame, fairyPercent };
+  /*
+   * 계정 레벨업 필요 경험치 (레벨 구간별 식).
+   * 값이 1e308 을 넘는 구간이 있어 모두 log10 으로 다룬다.
+   */
+  const LEVEL_EXP = {
+    early: [[1, 1, 20000], [2, 15, 1000], [16, 30, 3000], [31, 148, 8000]],
+    midEnd: 7799, midFirst: 3122.93, midStep: 9900, midGrowth: 1.57, midPerLevel: 100,
+    highEnd: 140499, highBaseLog: Math.log10(4.1495685767029427) + 20, highBundleBase: 78,
+    bundleGrowthLog: Math.log10(1.647715), perLevelRate: 0.0005, roundFrom: 60000, roundDigits: 1000,
+    higherEnd: 299999, higherBaseLog: Math.log10(2.63289) + 308, higherBundleBase: 1405,
+    topEnd: 315000, topBaseLog: Math.log10(2.225) + 654, topBundleBase: 3000,
+    topBundleGrowthLog: Math.log10(1.6485), topInBundleLog: Math.log10(1.05),
+    lastBaseLog: Math.log10(8.141) + 686, lastPerLevelLog: Math.log10(1.0004880206850599),
+    lastBundleLog: Math.log10(1.5700708684432332),
+    bundle: 100, maxSpan: 1000000,
+  };
+  const midBundleCache = [0, LEVEL_EXP.midFirst];
+
+  /** 149~7799 구간의 묶음 바탕값 d_k: d_1 = 3122.93, d_(j+1) = (d_j + 9900 x j^2) x 1.57 */
+  function midBundleBase(bundle) {
+    for (let j = midBundleCache.length - 1; j < bundle; j += 1) {
+      midBundleCache[j + 1] = (midBundleCache[j] + LEVEL_EXP.midStep * j * j) * LEVEL_EXP.midGrowth;
+    }
+    return midBundleCache[bundle];
+  }
+
+  /** 레벨 L 에서 L+1 로 가는 데 필요한 경험치 (log10) */
+  function levelExpLog(level) {
+    const E = LEVEL_EXP;
+    const early = E.early.find(([from, to]) => level >= from && level <= to);
+    if (early) return Math.log10(early[2]);
+    const bundle = Math.floor(level / E.bundle);
+    const inBundle = level % E.bundle;
+    if (level <= E.midEnd) return Math.log10(midBundleBase(bundle) + E.midPerLevel * bundle * bundle * inBundle);
+    if (level <= E.highEnd) {
+      const log = E.highBaseLog + (bundle - E.highBundleBase) * E.bundleGrowthLog + Math.log10(1 + E.perLevelRate * inBundle);
+      if (level < E.roundFrom) return log;
+      // 가수를 소수 셋째 자리로 반올림, 지수는 그대로
+      const exponent = Math.floor(log);
+      return Math.log10(Math.round(Math.pow(10, log - exponent) * E.roundDigits) / E.roundDigits) + exponent;
+    }
+    if (level <= E.higherEnd) {
+      return E.higherBaseLog + (bundle - E.higherBundleBase) * E.bundleGrowthLog + Math.log10(1 + E.perLevelRate * inBundle);
+    }
+    if (level <= E.topEnd) {
+      return E.topBaseLog + (bundle - E.topBundleBase) * E.topBundleGrowthLog + (inBundle / E.bundle) * E.topInBundleLog;
+    }
+    const past = level - E.topEnd;
+    const bundlesPast = Math.floor(past / E.bundle);
+    return E.lastBaseLog + (past - bundlesPast) * E.lastPerLevelLog + bundlesPast * E.lastBundleLog;
+  }
+
+  /** log10 끼리 더하기 */
+  function addLog(a, b) {
+    if (!isFinite(a)) return b;
+    const high = Math.max(a, b);
+    return high + Math.log10(1 + Math.pow(10, Math.min(a, b) - high));
+  }
+
+  /**
+   * 현재 레벨 (막대 % 만큼 모음) 에서 목표 레벨에 닿기까지 더 필요한 경험치 (log10).
+   * 레벨이 비었거나 목표가 현재 이하, 너무 먼 목표면 null.
+   */
+  function expToTargetLog(currentLevel, currentPercent, targetLevel) {
+    if (!(currentLevel >= 1) || !(targetLevel > currentLevel) || targetLevel - currentLevel > LEVEL_EXP.maxSpan) return null;
+    let total = -Infinity;
+    for (let level = currentLevel; level < targetLevel; level += 1) total = addLog(total, levelExpLog(level));
+    const percent = Math.min(Math.max(currentPercent || 0, 0), 100);
+    if (percent === 0) return total;
+    const collected = levelExpLog(currentLevel) + Math.log10(percent / 100);
+    return total + Math.log10(1 - Math.pow(10, collected - total));
+  }
+
+  const api = { RESOURCES, offlinePerMinute, bonusPercent, rewardLog, breakeven, formatGame, fairyPercent, levelExpLog, expToTargetLog, LUNCHBOX_MINUTES, lunchboxPerMinuteLog };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.FloorCalc = api;
 })(typeof window !== 'undefined' ? window : globalThis);
