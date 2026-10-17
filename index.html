@@ -190,6 +190,7 @@
 
   const MINUTES_PER_HOUR = 60;
   const HOURS_PER_DAY = 24;
+  const MAX_SHOWN_DAYS = 999;
   const ids = ['offlineFloor', 'kills', 'vip', 'fairyLevel', 'adRemoved', 'ad', 'offlinePackage', 'currentLevel', 'currentExpPercent', 'targetLevel'];
   FloorCalc.RESOURCES.forEach((r) => ids.push('food_' + r, 'guild_' + r, 'event_' + r, 'pkg_' + r));
   FAIRY_RESOURCES.forEach((r) => ids.push('fairy_' + r));
@@ -225,8 +226,9 @@
     };
   }
 
-  /** 걸리는 시간 글: 전체 분을 올림한 뒤 시간·분으로 나눔 (60분은 시간으로 넘어감, 0분은 생략), 하루 이상은 시간 (일) */
+  /** 걸리는 시간 글: 전체 분을 올림한 뒤 시간·분으로 나눔 (60분은 시간으로 넘어감, 0분은 생략), 하루 이상은 시간 (일), 999일 넘으면 999일+ */
   function formatDuration(minutes) {
+    if (minutes > MAX_SHOWN_DAYS * HOURS_PER_DAY * MINUTES_PER_HOUR) return `${MAX_SHOWN_DAYS}일+`;
     if (!isFinite(minutes)) return '-';
     const totalMinutes = Math.max(1, Math.ceil(minutes));
     const hours = Math.floor(totalMinutes / MINUTES_PER_HOUR);
