@@ -191,6 +191,7 @@
   const MINUTES_PER_HOUR = 60;
   const HOURS_PER_DAY = 24;
   const MAX_SHOWN_DAYS = 999;
+  const MAX_SHOWN_LUNCHBOXES = 99999;
   const ids = ['offlineFloor', 'kills', 'vip', 'fairyLevel', 'adRemoved', 'ad', 'offlinePackage', 'currentLevel', 'currentExpPercent', 'targetLevel'];
   FloorCalc.RESOURCES.forEach((r) => ids.push('food_' + r, 'guild_' + r, 'event_' + r, 'pkg_' + r));
   FAIRY_RESOURCES.forEach((r) => ids.push('fairy_' + r));
@@ -305,8 +306,12 @@
     // 도시락 (중급, 1시간) 은 최고 층 기준이라 층마다 같음 → 오프라인 층을 최고 층으로 보고 한 줄
     if (targetLog !== null) {
       const lunchboxMinutes = Math.pow(10, targetLog - FloorCalc.lunchboxPerMinuteLog(data, input, input.offlineFloor, 'exp'));
-      const boxes = Math.ceil(lunchboxMinutes / FloorCalc.LUNCHBOX_MINUTES.medium).toLocaleString('ko-KR');
-      parts.push(`<p class="note">목표 레벨까지 도시락 ${boxes}개</p>`);
+      const boxCount = Math.ceil(lunchboxMinutes / FloorCalc.LUNCHBOX_MINUTES.medium);
+      // 너무 많으면 99,999개+ (값이 넘쳐 Infinity 여도 같음)
+      const boxes = boxCount > MAX_SHOWN_LUNCHBOXES
+        ? `${MAX_SHOWN_LUNCHBOXES.toLocaleString('ko-KR')}개+`
+        : `${boxCount.toLocaleString('ko-KR')}개`;
+      parts.push(`<p class="note">목표 레벨까지 도시락 ${boxes}</p>`);
     }
     for (const { floor, kind } of floors) {
       if (parts.length >= MAX_ROWS) break;
